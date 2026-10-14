@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple MP3 Player</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <div class="player" id="player">
+    <div class="disc-wrap">
+      <div class="disc"></div>
+    </div>
+
+    <div class="info">
+      <div class="title" id="title">No song loaded</div>
+      <div class="artist" id="artist">Add mp3 files to start</div>
+    </div>
+
+    <div class="progress">
+      <span id="cur">0:00</span>
+      <input type="range" id="seek" min="0" max="100" value="0" step="0.1" aria-label="Seek">
+      <span id="dur">0:00</span>
+    </div>
+
+    <div class="controls">
+      <button class="ctl" id="shuffle" aria-label="Shuffle" title="Shuffle">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M17 3l4 4-4 4V8h-2.6l-3 3.6-1.5-1.3L13.5 6H17zM3 7h4.5l9 11H17v-3l4 4-4 4v-3h-1.5L6.5 9H3zM3 17h3.2l2-2.4 1.5 1.3L7.6 19H3z" />
+        </svg>
+      </button>
+      <button class="ctl" id="prev" aria-label="Previous">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 6h2v12H6zm3.5 6L18 6v12z" />
+        </svg>
+      </button>
+      <button class="play" id="play" aria-label="Play">
+        <svg viewBox="0 0 24 24" id="playIcon">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </button>
+      <button class="ctl" id="next" aria-label="Next">
+        <svg viewBox="0 0 24 24">
+          <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" />
+        </svg>
+      </button>
+      <button class="ctl" id="repeat" aria-label="Repeat" title="Repeat">
+        <svg viewBox="0 0 24 24">
+          <path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="vol">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z" />
+      </svg>
+      <input type="range" id="volume" min="0" max="1" step="0.01" value="0.8" aria-label="Volume">
+    </div>
+
+    <div class="list-head">
+      <span id="count">0 songs</span>
+      <button class="add" id="add">+ Add songs</button>
+      <input type="file" id="file" accept="audio/*" multiple hidden>
+    </div>
+    <ul class="playlist" id="playlist">
+      <li class="empty">Playlist khali hai</li>
+    </ul>
+  </div>
+
+  <audio id="audio"></audio>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const audio = $('audio'), player = $('player');
+    const seek = $('seek'), volume = $('volume');
+    let tracks = [], index = -1, shuffle = false, repeat = false;
+
+    const PLAY = 'M8 5v14l11-7z';
+    const PAUSE = 'M6 5h4v14H6zm8 0h4v14h-4z';
+
+    const fmt = s => {
+      if (!isFinite(s)) return '0:00';
+      const m = Math.floor(s / 60), r = Math.floor(s % 60);
+      return m + ':' + String(r).padStart(2, '0');
+    };
+    const paint = el => el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min)) * 100 + '%');
+
+    function renderList() {
+      const ul = $('playlist');
+      $('count').textContent = tracks.length + (tracks.length === 1 ? ' song' : ' songs');
+      if (!tracks.length) { ul.innerHTML = '<li class="empty">Playlist khali hai</li>'; return; }
+      ul.innerHTML = '';
+      tracks.forEach((t, i) => {
+        const li = document.createElement('li');
+        li.tabIndex = 0;
+        if (i === index) li.className = 'active';
+        li.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="t"></span>';
+        li.querySelector('.t').textContent = t.name;
+        li.onclick = () => load(i, true);
+        li.onkeydown = e => { if (e.key === 'Enter') load(i, true); };
+        ul.appendChild(li);
+      });
+    }
+
+    function load(i, autoplay) {
+      index = i;
+      const t = tracks[i];
+      audio.src = t.url;
+      $('title').textContent = t.name;
+      $('artist').textContent = 'Track ' + (i + 1) + ' of ' + tracks.length;
+      renderList();
+      if (autoplay) audio.play();
+    }
+
+    function setPlaying(on) {
+      player.classList.toggle('playing', on);
+      $('playIcon').innerHTML = '<path d="' + (on ? PAUSE : PLAY) + '"/>';
+    }
+
+    function next() {
+      if (!tracks.length) return;
+      const n = shuffle ? Math.floor(Math.random() * tracks.length) : (index + 1) % tracks.length;
+      load(n, true);
+    }
+    function prev() {
+      if (!tracks.length) return;
+      if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+      load((index - 1 + tracks.length) % tracks.length, true);
+    }
+
+    $('add').onclick = () => $('file').click();
+    $('file').onchange = e => {
+      const wasEmpty = !tracks.length;
+      [...e.target.files].forEach(f => tracks.push({ name: f.name.replace(/\.[^.]+$/, ''), url: URL.createObjectURL(f) }));
+      e.target.value = '';
+      if (wasEmpty && tracks.length) load(0, false); else renderList();
+    };
+
+    $('play').onclick = () => {
+      if (!tracks.length) { $('file').click(); return; }
+      audio.paused ? audio.play() : audio.pause();
+    };
+    $('next').onclick = next;
+    $('prev').onclick = prev;
+    $('shuffle').onclick = e => { shuffle = !shuffle; e.currentTarget.classList.toggle('on', shuffle); };
+    $('repeat').onclick = e => { repeat = !repeat; e.currentTarget.classList.toggle('on', repeat); };
+
+    audio.onplay = () => setPlaying(true);
+    audio.onpause = () => setPlaying(false);
+    audio.onloadedmetadata = () => { $('dur').textContent = fmt(audio.duration); };
+    audio.ontimeupdate = () => {
+      if (!audio.duration) return;
+      seek.value = (audio.currentTime / audio.duration) * 100;
+      paint(seek);
+      $('cur').textContent = fmt(audio.currentTime);
+    };
+    audio.onended = () => {
+      if (repeat) { audio.currentTime = 0; audio.play(); }
+      else next();
+    };
+    seek.oninput = () => { if (audio.duration) audio.currentTime = (seek.value / 100) * audio.duration; paint(seek); };
+    volume.oninput = () => { audio.volume = volume.value; paint(volume); };
+
+    audio.volume = volume.value; paint(volume); paint(seek);
+  </script>
+</body>
+
+</html>
