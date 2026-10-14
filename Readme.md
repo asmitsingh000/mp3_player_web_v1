@@ -1,7 +1,7 @@
-#  Web MP3 Player (v1)
+#  Web MP3 Player (v1.1)
 
 A sleek web mp3 player which is made using simple html, css and javascript. It is lightweighted web based simple mp3 player...
-There is something that is you need to select and add music to the player 
+There is something that is you need to select and add music to the player, it has default sounds at first
 ---
 
 ##  Features
@@ -28,6 +28,8 @@ There is something that is you need to select and add music to the player
 ```text
 mp3_player_web_v1/
 │
+├── default_audio
+    ├── song1.mp3    #This is the default song which will be played later on you can add something else
 ├── index.html       # Main HTML structure and script in it....
 ├── style.css        # Styling and layout design
 └── README.md        # Project documentation

@@ -68,7 +68,7 @@
       <input type="file" id="file" accept="audio/*" multiple hidden>
     </div>
     <ul class="playlist" id="playlist">
-      <li class="empty">Playlist Is Empty Right Now, Add some songs</li>
+      <li class="empty">Playlist khali hai</li>
     </ul>
   </div>
 
@@ -78,7 +78,13 @@
     const $ = id => document.getElementById(id);
     const audio = $('audio'), player = $('player');
     const seek = $('seek'), volume = $('volume');
+
+    /* Default songs = default_audio/ folder ke saare .mp3 files */
+    const DEFAULT_DIR = 'default_audio/';
+
     let tracks = [], index = -1, shuffle = false, repeat = false;
+    let usingDefaults = false, userAdded = false;
+    let emptyMsg = 'default_audio folder check ho raha hai...';
 
     const PLAY = 'M8 5v14l11-7z';
     const PAUSE = 'M6 5h4v14H6zm8 0h4v14h-4z';
@@ -92,9 +98,21 @@
 
     function renderList() {
       const ul = $('playlist');
-      $('count').textContent = tracks.length + (tracks.length === 1 ? ' song' : ' songs');
-      if (!tracks.length) { ul.innerHTML = '<li class="empty">Playlist khali hai</li>'; return; }
+      $('count').textContent = usingDefaults
+        ? tracks.length + ' default ' + (tracks.length === 1 ? 'song' : 'songs')
+        : tracks.length + (tracks.length === 1 ? ' song' : ' songs');
+      if (!tracks.length) {
+        ul.innerHTML = '<li class="empty"></li>';
+        ul.firstChild.textContent = emptyMsg;
+        return;
+      }
       ul.innerHTML = '';
+      if (usingDefaults) {
+        const h = document.createElement('li');
+        h.className = 'section-label';
+        h.textContent = 'Default songs (apne songs add karoge to ye hat jayenge)';
+        ul.appendChild(h);
+      }
       tracks.forEach((t, i) => {
         const li = document.createElement('li');
         li.tabIndex = 0;
@@ -112,9 +130,9 @@
       const t = tracks[i];
       audio.src = t.url;
       $('title').textContent = t.name;
-      $('artist').textContent = 'Track ' + (i + 1) + ' of ' + tracks.length;
+      $('artist').textContent = usingDefaults ? 'Default song' : ('Track ' + (i + 1) + ' of ' + tracks.length);
       renderList();
-      if (autoplay) audio.play();
+      if (autoplay) audio.play().catch(() => { });
     }
 
     function setPlaying(on) {
@@ -133,17 +151,78 @@
       load((index - 1 + tracks.length) % tracks.length, true);
     }
 
+    /* ---------- default_audio folder se songs lao ---------- */
+    const nameFromFile = f => f.replace(/\.[^.]+$/, '');
+    // Kisi bhi path (/ ya \ wala, encoded ya normal) se sirf file ka naam nikalo
+    function baseName(p) {
+      let x = p;
+      try { x = decodeURIComponent(p); } catch (e) { }
+      return x.replace(/\\/g, '/').split('/').pop().trim();
+    }
+
+    async function listFromDirectory() {
+      // Server ka folder listing page padhta hai (python http.server, Live Server, Apache, nginx autoindex...)
+      const res = await fetch(DEFAULT_DIR, { cache: 'no-store' });
+      if (!res.ok) throw new Error('no listing');
+      const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+      const files = [];
+      doc.querySelectorAll('a[href]').forEach(a => {
+        const href = a.getAttribute('href').split('?')[0].split('#')[0];
+        if (!/\.mp3$/i.test(href)) return;
+        const file = baseName(href);
+        if (file && !files.includes(file)) files.push(file);
+      });
+      return files;
+    }
+
+    async function listFromJson() {
+      // Fallback: default_audio/playlist.json  ->  ["a.mp3", "b.mp3"]
+      const res = await fetch(DEFAULT_DIR + 'playlist.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('no json');
+      const arr = await res.json();
+      return arr.map(baseName).filter(f => /\.mp3$/i.test(f));
+    }
+
+    async function loadDefaults() {
+      let files = [];
+      try { files = await listFromDirectory(); } catch (e) { }
+      if (!files.length) { try { files = await listFromJson(); } catch (e) { } }
+
+      if (userAdded) return;                     // user ne pehle hi apne songs daal diye
+      if (!files.length) {
+        emptyMsg = location.protocol === 'file:'
+          ? 'Server se chalao (python -m http.server) ya + Add songs dabao'
+          : 'default_audio me koi .mp3 nahi mila (ya playlist.json banao)';
+        renderList();
+        return;
+      }
+      files.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      tracks = files.map(f => ({ name: nameFromFile(f), url: DEFAULT_DIR + encodeURIComponent(f) }));
+      usingDefaults = true;
+      load(0, false);
+    }
+
+    /* ---------- user songs ---------- */
     $('add').onclick = () => $('file').click();
     $('file').onchange = e => {
-      const wasEmpty = !tracks.length;
-      [...e.target.files].forEach(f => tracks.push({ name: f.name.replace(/\.[^.]+$/, ''), url: URL.createObjectURL(f) }));
+      const files = [...e.target.files];
       e.target.value = '';
-      if (wasEmpty && tracks.length) load(0, false); else renderList();
+      if (!files.length) return;
+      userAdded = true;
+      if (usingDefaults) {            // default section hide + default songs remove
+        audio.pause();
+        tracks = [];
+        index = -1;
+        usingDefaults = false;
+      }
+      const wasEmpty = !tracks.length;
+      files.forEach(f => tracks.push({ name: nameFromFile(f.name), url: URL.createObjectURL(f) }));
+      if (wasEmpty || index === -1) load(0, false); else renderList();
     };
 
     $('play').onclick = () => {
       if (!tracks.length) { $('file').click(); return; }
-      audio.paused ? audio.play() : audio.pause();
+      audio.paused ? audio.play().catch(() => { }) : audio.pause();
     };
     $('next').onclick = next;
     $('prev').onclick = prev;
@@ -163,10 +242,13 @@
       if (repeat) { audio.currentTime = 0; audio.play(); }
       else next();
     };
+    audio.onerror = () => { $('artist').textContent = 'Ye song load nahi hua, file check karo'; };
     seek.oninput = () => { if (audio.duration) audio.currentTime = (seek.value / 100) * audio.duration; paint(seek); };
     volume.oninput = () => { audio.volume = volume.value; paint(volume); };
 
     audio.volume = volume.value; paint(volume); paint(seek);
+    renderList();
+    loadDefaults();
   </script>
 </body>
 
