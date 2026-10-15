@@ -33,3 +33,13 @@ mp3_player_web_v1/
 ├── index.html       # Main HTML structure and script in it....
 ├── style.css        # Styling and layout design
 └── README.md        # Project documentation
+
+```
+---
+## Project Images
+
+<img width="1917" height="935" alt="Image" src="https://github.com/user-attachments/assets/b0a51dd5-d082-426f-afda-5f09ad445b46" />
+
+<img width="1287" height="1070" alt="Image" src="https://github.com/user-attachments/assets/8336ea5a-430c-4ae1-929f-f7cc52a914ad" />
+
+<img width="1917" height="926" alt="Image" src="https://github.com/user-attachments/assets/366b4af0-932e-4b22-88a1-31f5a74f70d9" />
